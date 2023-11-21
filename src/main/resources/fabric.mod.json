@@ -1,11 +1,12 @@
 {
   "schemaVersion": 1,
-  "id": "polyfactory",
+  "id": "justpolydrawers",
   "version": "${version}",
 
-  "name": "PolyFactory",
-  "description": "Let's build a factory! A tech mod for your Minecraft server!",
+  "name": "Just Poly Drawers",
+  "description": "PolyFactory's containers forked into its own mod, with more features.",
   "authors": [
+    "nulldawg",
     "Patbox"
   ],
   "contact": {
@@ -14,19 +15,19 @@
   },
 
   "license": "LGPLv3",
-  "icon": "assets/polyfactory/textures/icon.png",
+  "icon": "assets/justpolydrawers/textures/icon.png",
 
   "environment": "*",
   "entrypoints": {
     "main": [
-      "eu.pb4.polyfactory.ModInit"
+      "eu.pb4.justpolydrawers.ModInit"
     ],
     "fabric-datagen": [
-      "eu.pb4.polyfactory.datagen.DataGenInit"
+      "eu.pb4.justpolydrawers.datagen.DataGenInit"
     ]
   },
   "mixins": [
-    "polyfactory.mixins.json",
+    "justpolydrawers.mixins.json",
     "factorytools.mixins.json"
   ],
 

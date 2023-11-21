@@ -1,0 +1,331 @@
+package eu.pb4.justpolydrawers.ui;
+
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
+import eu.pb4.mapcanvas.api.core.CanvasColor;
+import eu.pb4.mapcanvas.api.core.CanvasImage;
+import eu.pb4.mapcanvas.api.core.DrawableCanvas;
+import eu.pb4.mapcanvas.api.font.DefaultFonts;
+import eu.pb4.mapcanvas.api.utils.CanvasUtils;
+import eu.pb4.justpolydrawers.ModInit;
+import eu.pb4.justpolydrawers.util.ResourceUtils;
+import eu.pb4.polymer.resourcepack.api.AssetPaths;
+import eu.pb4.polymer.resourcepack.api.PolymerModelData;
+import eu.pb4.polymer.resourcepack.api.PolymerResourcePackUtils;
+import eu.pb4.sgui.api.elements.GuiElementBuilder;
+import it.unimi.dsi.fastutil.chars.*;
+import it.unimi.dsi.fastutil.objects.Object2ObjectMap;
+import it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap;
+import net.minecraft.item.Item;
+import net.minecraft.item.Items;
+import net.minecraft.nbt.NbtCompound;
+import net.minecraft.text.Style;
+import net.minecraft.text.Text;
+import net.minecraft.util.Identifier;
+import net.minecraft.util.Pair;
+
+import javax.imageio.ImageIO;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.function.BiConsumer;
+import java.util.function.Function;
+import java.util.function.IntFunction;
+import java.util.function.Supplier;
+
+import static eu.pb4.justpolydrawers.util.FactoryUtil.id;
+
+public class UiResourceCreator {
+    public static final String BASE_MODEL = "minecraft:item/generated";
+    public static final String X32_MODEL = "polyfactory:sgui/button_32";
+    public static final String X32_RIGHT_MODEL = "polyfactory:sgui/button_32_right";
+
+    private static final Style STYLE = Style.EMPTY.withColor(0xFFFFFF).withFont(id("gui"));
+    private static final String ITEM_TEMPLATE = """
+            {
+              "parent": "|BASE|",
+              "textures": {
+                "layer0": "|ID|"
+              }
+            }
+            """.replace(" ", "").replace("\n", "");
+
+    private static final List<SlicedTexture> VERTICAL_PROGRESS = new ArrayList<>();
+    private static final List<SlicedTexture> HORIZONTAL_PROGRESS = new ArrayList<>();
+    private static final List<Pair<PolymerModelData, String>> SIMPLE_MODEL = new ArrayList<>();
+    private static final Char2IntMap SPACES = new Char2IntOpenHashMap();
+    private static final Char2ObjectMap<Identifier> TEXTURES = new Char2ObjectOpenHashMap<>();
+    private static final Object2ObjectMap<Pair<Character, Character>, Identifier> TEXTURES_POLYDEX = new Object2ObjectOpenHashMap<>();
+    private static final List<String> TEXTURES_NUMBERS = new ArrayList<>();
+    private static char character = 'a';
+
+    private static final char CHEST_SPACE0 = character++;
+    private static final char CHEST_SPACE1 = character++;
+
+    public static Supplier<GuiElementBuilder> icon16(String path) {
+        var model = genericIconRaw(Items.ALLIUM, path, BASE_MODEL);
+        return () -> new GuiElementBuilder(model.item()).setName(Text.empty()).hideFlags().setCustomModelData(model.value());
+    }
+
+    public static Supplier<GuiElementBuilder> icon32(String path) {
+        var model = genericIconRaw(Items.ALLIUM, path, X32_MODEL);
+        return () -> new GuiElementBuilder(model.item()).setName(Text.empty()).hideFlags().setCustomModelData(model.value());
+    }
+
+    public static IntFunction<GuiElementBuilder> icon32Color(String path) {
+        var model = genericIconRaw(Items.LEATHER_LEGGINGS, path, X32_MODEL);
+        return (i) -> {
+            var b = new GuiElementBuilder(model.item()).setName(Text.empty()).hideFlags().setCustomModelData(model.value());
+            var display = new NbtCompound();
+            display.putInt("color", i);
+            b.getOrCreateNbt().put("display", display);
+            return b;
+        };
+    }
+
+    public static IntFunction<GuiElementBuilder> icon16(String path, int size) {
+        var models = new PolymerModelData[size];
+
+        for (var i = 0; i < size; i++) {
+            models[i] = genericIconRaw(Items.ALLIUM, path + "_" + i, BASE_MODEL);
+        }
+        return (i) -> new GuiElementBuilder(models[i].item()).setName(Text.empty()).hideFlags().setCustomModelData(models[i].value());
+    }
+
+    public static IntFunction<GuiElementBuilder> horizontalProgress16(String path, int start, int stop, boolean reverse) {
+        return genericProgress(path, start, stop, reverse, BASE_MODEL, HORIZONTAL_PROGRESS);
+    }
+
+    public static IntFunction<GuiElementBuilder> horizontalProgress32(String path, int start, int stop, boolean reverse) {
+        return genericProgress(path, start, stop, reverse, X32_MODEL, HORIZONTAL_PROGRESS);
+    }
+
+    public static IntFunction<GuiElementBuilder> horizontalProgress32Right(String path, int start, int stop, boolean reverse) {
+        return genericProgress(path, start, stop, reverse, X32_RIGHT_MODEL, HORIZONTAL_PROGRESS);
+    }
+
+    public static IntFunction<GuiElementBuilder> verticalProgress32(String path, int start, int stop, boolean reverse) {
+        return genericProgress(path, start, stop, reverse, X32_MODEL, VERTICAL_PROGRESS);
+    }
+
+    public static IntFunction<GuiElementBuilder> verticalProgress32Right(String path, int start, int stop, boolean reverse) {
+        return genericProgress(path, start, stop, reverse, X32_RIGHT_MODEL, VERTICAL_PROGRESS);
+    }
+
+    public static IntFunction<GuiElementBuilder> verticalProgress16(String path, int start, int stop, boolean reverse) {
+        return genericProgress(path, start, stop, reverse, BASE_MODEL, VERTICAL_PROGRESS);
+    }
+
+    public static IntFunction<GuiElementBuilder> genericProgress(String path, int start, int stop, boolean reverse, String base, List<SlicedTexture> progressType) {
+
+        var models = new PolymerModelData[stop - start];
+
+        progressType.add(new SlicedTexture(path, start, stop, reverse));
+
+        for (var i = start; i < stop; i++) {
+            models[i - start] = genericIconRaw(Items.ALLIUM,  "gen/" + path + "_" + i, base);
+        }
+        return (i) -> new GuiElementBuilder(models[i].item()).setName(Text.empty()).hideFlags().setCustomModelData(models[i].value());
+    }
+
+    public static IntFunction<GuiElementBuilder>[] createNumbers(String prefix) {
+        var list = new ArrayList<IntFunction<GuiElementBuilder>>();
+
+        for (int i = 0; i < 10; i++) {
+            list.add(icon32Color("numbers/" + prefix + i));
+        }
+
+        TEXTURES_NUMBERS.add(prefix);
+
+        //noinspection unchecked
+        return list.toArray((IntFunction<GuiElementBuilder>[]) new IntFunction[0]);
+    }
+
+
+    public static PolymerModelData genericIconRaw(Item item, String path, String base) {
+        var model = PolymerResourcePackUtils.requestModel(item, elementPath(path));
+        SIMPLE_MODEL.add(new Pair<>(model, base));
+        return model;
+    }
+
+    private static Identifier elementPath(String path) {
+        return id("sgui/elements/" + path);
+    }
+
+    public static Function<Text, Text> background(String path) {
+        var builder = new StringBuilder().append(CHEST_SPACE0);
+        var c = (character++);
+        builder.append(c);
+        builder.append(CHEST_SPACE1);
+        TEXTURES.put(c, id("sgui/" + path));
+
+        return new TextBuilders(Text.literal(builder.toString()).setStyle(STYLE));
+    }
+
+    public static Pair<Text, Text> polydexBackground(String path) {
+        var c = (character++);
+        var d = (character++);
+        TEXTURES_POLYDEX.put(new Pair<>(c, d), id("sgui/polydex/" + path));
+
+        return new Pair<>(
+                Text.literal(Character.toString(c)).setStyle(STYLE),
+                Text.literal(Character.toString(d)).setStyle(STYLE)
+        );
+    }
+
+    public static void setup() {
+        SPACES.put(CHEST_SPACE0, -8);
+        SPACES.put(CHEST_SPACE1, -168);
+
+        if (ModInit.DYNAMIC_ASSETS) {
+            PolymerResourcePackUtils.RESOURCE_PACK_CREATION_EVENT.register((b) -> UiResourceCreator.generateAssets(b::addData));
+        }
+    }
+
+    private static void generateProgress(BiConsumer<String, byte[]> assetWriter, List<SlicedTexture> list, boolean horizontal) {
+        for (var pair : list) {
+            var sourceImage = ResourceUtils.getTexture(elementPath(pair.path()));
+
+            var image = new BufferedImage(sourceImage.getWidth(), sourceImage.getHeight(), BufferedImage.TYPE_INT_ARGB);
+
+            var xw = horizontal ? image.getHeight() : image.getWidth();
+
+            var mult = pair.reverse ? -1 : 1;
+            var offset = pair.reverse ? pair.stop + pair.start - 1 : 0;
+
+            for (var y = pair.start; y < pair.stop; y++) {
+                var path = elementPath("gen/" + pair.path + "_" + y);
+                var pos = offset + y * mult;
+
+                for (var x = 0; x < xw; x++) {
+                    if (horizontal) {
+                        image.setRGB(pos, x, sourceImage.getRGB(pos, x));
+                    } else {
+                        image.setRGB(x, pos, sourceImage.getRGB(x, pos));
+                    }
+                }
+
+                var out = new ByteArrayOutputStream();
+                try {
+                    ImageIO.write(image, "png", out);
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+
+                assetWriter.accept(AssetPaths.texture(path.getNamespace(), path.getPath() + ".png"), out.toByteArray());
+            }
+        }
+    }
+
+    public static void generateAssets(BiConsumer<String, byte[]> assetWriter) {
+        for (var texture : SIMPLE_MODEL) {
+            assetWriter.accept("assets/" + texture.getLeft().modelPath().getNamespace() + "/models/" + texture.getLeft().modelPath().getPath() + ".json",
+                    ITEM_TEMPLATE.replace("|ID|", texture.getLeft().modelPath().toString()).replace("|BASE|", texture.getRight()).getBytes(StandardCharsets.UTF_8));
+        }
+
+        generateProgress(assetWriter, VERTICAL_PROGRESS, false);
+        generateProgress(assetWriter, HORIZONTAL_PROGRESS, true);
+
+        for (var value : TEXTURES_NUMBERS) {
+            try {
+                generateNumbers(assetWriter, value);
+            } catch (Throwable e) {
+                e.printStackTrace();
+            }
+        }
+
+        var fontBase = new JsonObject();
+        var providers = new JsonArray();
+
+        {
+            var spaces = new JsonObject();
+            spaces.addProperty("type", "space");
+            var advances = new JsonObject();
+            SPACES.forEach((c, i) -> advances.addProperty(Character.toString(c), i));
+            spaces.add("advances", advances);
+            providers.add(spaces);
+        }
+
+
+        TEXTURES.forEach((character, id) -> {
+            var bitmap = new JsonObject();
+            bitmap.addProperty("type", "bitmap");
+            bitmap.addProperty("file", id.toString() + ".png");
+            bitmap.addProperty("ascent", 13);
+            bitmap.addProperty("height", 256);
+            var chars = new JsonArray();
+            chars.add(Character.toString(character));
+            bitmap.add("chars", chars);
+            providers.add(bitmap);
+        });
+
+        TEXTURES_POLYDEX.forEach((characters, id) -> {
+            var bitmap = new JsonObject();
+            bitmap.addProperty("type", "bitmap");
+            bitmap.addProperty("file", id.toString() + ".png");
+            bitmap.addProperty("ascent", -4);
+            bitmap.addProperty("height", 128);
+            var chars = new JsonArray();
+            chars.add(Character.toString(characters.getLeft()));
+            chars.add(Character.toString(characters.getRight()));
+            bitmap.add("chars", chars);
+            providers.add(bitmap);
+        });
+
+        fontBase.add("providers", providers);
+
+        assetWriter.accept("assets/justpolydrawers/font/gui.json", fontBase.toString().getBytes(StandardCharsets.UTF_8));
+    }
+
+    private static void generateNumbers(BiConsumer<String, byte[]> assetWriter, String right) throws IOException {
+        for (int i = 0; i < 10; i++) {
+            var image = new CanvasImage(32, 32);
+            int code = 48 + i;
+            var width = DefaultFonts.VANILLA.getGlyphWidth(code, 8 * 3, 0);
+            if (right.equals("shadow/")) {
+                DefaultFonts.VANILLA.drawGlyph(image, code, 14 - width / 2 + 3, 5 + 3, 8 * 3, 0, CanvasColor.WHITE_GRAY_LOWEST);
+            }
+            DefaultFonts.VANILLA.drawGlyph(image, code, 14 - width / 2, 5, 8 * 3, 0, CanvasColor.WHITE_HIGH);
+
+            var buf = new ByteArrayOutputStream();
+
+            ImageIO.write(CanvasUtils.toImage(image), "png", buf);
+
+            assetWriter.accept("assets/justpolydrawers/textures/sgui/elements/numbers/" + right + i + ".png", buf.toByteArray());
+        }
+    }
+
+    private record TextBuilders(Text base) implements Function<Text, Text> {
+        @Override
+        public Text apply(Text text) {
+            return Text.empty().append(base).append(text);
+        }
+    }
+
+    public record SlicedTexture(String path, int start, int stop, boolean reverse) {};
+
+    private record ImageCanvas(BufferedImage image) implements DrawableCanvas {
+        @Override
+        public byte getRaw(int x, int y) {
+            return CanvasUtils.findClosestRawColorARGB(image.getRGB(x, y));
+        }
+
+        @Override
+        public void setRaw(int x, int y, byte color) {
+            image.setRGB(x, y, CanvasColor.getFromRaw(color).getRgbColor());
+        }
+
+        @Override
+        public int getHeight() {
+            return this.image.getHeight();
+        }
+
+        @Override
+        public int getWidth() {
+            return this.image.getWidth();
+        }
+    }
+}

@@ -1,0 +1,9 @@
+{
+	"parent": "justpolydrawers:block/wooden_container",
+	"textures": {
+		"0": "justpolydrawers:block/container/creative_back",
+		"1": "justpolydrawers:block/container/creative_front",
+		"2": "justpolydrawers:block/container/creative_side",
+		"particle": "justpolydrawers:block/container/creative_back"
+	}
+}
